@@ -165,6 +165,18 @@ def lstm_grid_job_list():
     return jobs
 
 
+def new_model_job_list():
+    """Referee 1, major 2: MLP on the flat vector and a recurrent KAN, at
+    every horizon, three seeds, five folds, under the leak-free protocol."""
+    jobs = []
+    for model in ("mlp", "rkan"):
+        for horizon in HORIZONS:
+            for seed in SEEDS:
+                for fold in range(rl.N_FOLDS):
+                    jobs.append((model, "-", horizon, seed, fold))
+    return jobs
+
+
 def best_check_job_list():
     """The best config from the new screening, at the remaining horizons."""
     jobs = []
@@ -187,6 +199,10 @@ def estimate_seconds(job):
         return 4.0 + 0.09 * spec["units"] * spec["layers"]
     if model == "kan":
         return {1: 4.0, 2: 4.0, 100: 8.0, 200: 14.0}[horizon]
+    if model == "mlp":
+        return 8.0
+    if model == "rkan":
+        return 30.0
     if config == "100u-linear":
         return 34.0
     return {1: 14.0, 2: 14.0, 100: 16.0, 200: 18.0}[horizon]
@@ -205,6 +221,8 @@ def job_path(job):
         directory = PRED_DIR + "_kangrid"
     if job[0] == "lstmcfg":
         directory = PRED_DIR + "_lstmgrid"
+    if job[0] in ("mlp", "rkan"):
+        directory = PRED_DIR + "_newmodels"
     return os.path.join(directory, job_key(job) + ".npz")
 
 
@@ -227,19 +245,18 @@ def build_lstm(config, lookback, n_features, horizon, seed):
 def run_job(job, dataframe, cache):
     model_name, config_name, horizon, seed, fold = job
 
-    if horizon not in cache:
-        x_all, y_all, dates = rl.build_sequences(dataframe, horizon)
-        volatility, efficiency = rl.window_statistics(x_all)
-        cache[horizon] = (x_all, y_all, dates, volatility, efficiency,
-                          rl.walk_forward_folds(len(x_all)))
-    x_all, y_all, dates, volatility, efficiency, folds = cache[horizon]
-
-    train_slice, test_slice = folds[fold]
-    x_train, y_train = x_all[train_slice], y_all[train_slice]
-    x_test, y_test = x_all[test_slice], y_all[test_slice]
-
-    thresholds = rl.regime_thresholds(volatility[train_slice], efficiency[train_slice])
-    labels = rl.assign_regimes(volatility[test_slice], efficiency[test_slice], thresholds)
+    # Leak-free fold: Min-Max fitted on this fold's training rows only. The
+    # model trains and predicts in fold scale; predictions are mapped back to
+    # the common reporting scale before anything is saved or scored. (Earlier
+    # runs trained on a file scaled over the whole series; see FINDINGS.md.)
+    key = (horizon, fold)
+    if key not in cache:
+        cache[key] = rl.make_fold(dataframe, horizon, fold)
+    F = cache[key]
+    x_train, y_train = F["x_train"], F["y_train"]
+    x_test, y_test = F["x_test"], F["y_test"]
+    thresholds, labels, to_report = F["thresholds"], F["labels"], F["to_report"]
+    dates, test_slice = F["dates_test"], F["test_slice"]
 
     started = time.time()
     train_rmse = None
@@ -251,7 +268,7 @@ def run_job(job, dataframe, cache):
                          seed + fold)
         net.fit(x_train, y_train, epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=0)
         prediction = net.predict(x_test, verbose=0)
-        train_rmse = rl.rmse(net.predict(x_train, verbose=0), y_train)
+        train_rmse = rl.rmse(to_report(net.predict(x_train, verbose=0)), to_report(y_train))
         parameters = net.count_params()
     elif model_name == "kancfg":
         import torch
@@ -283,8 +300,32 @@ def run_job(job, dataframe, cache):
         with torch.no_grad():
             prediction = net(flat_test).cpu().numpy()
             train_prediction = net(flat_train).cpu().numpy()
-        train_rmse = rl.rmse(train_prediction, y_train)
+        train_rmse = rl.rmse(to_report(train_prediction), to_report(y_train))
         parameters = sum(p.numel() for p in net.parameters() if p.requires_grad)
+    elif model_name == "mlp":
+        import tensorflow as tf
+
+        from kan_layer import build_mlp
+
+        flat_train = x_train.reshape(len(x_train), -1)
+        flat_test = x_test.reshape(len(x_test), -1)
+        net = build_mlp(flat_train.shape[1], horizon, width=32, seed=seed + fold)
+        stop = tf.keras.callbacks.EarlyStopping(monitor="loss", patience=20,
+                                                restore_best_weights=True)
+        net.fit(flat_train, y_train, epochs=200, batch_size=BATCH_SIZE,
+                verbose=0, callbacks=[stop])
+        prediction = net.predict(flat_test, verbose=0)
+        train_rmse = rl.rmse(to_report(net.predict(flat_train, verbose=0)), to_report(y_train))
+        parameters = net.count_params()
+    elif model_name == "rkan":
+        from kan_layer import build_recurrent_kan
+
+        net = build_recurrent_kan(x_train.shape[1], x_train.shape[2], horizon,
+                                  units=20, seed=seed + fold)
+        net.fit(x_train, y_train, epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=0)
+        prediction = net.predict(x_test, verbose=0)
+        train_rmse = rl.rmse(to_report(net.predict(x_train, verbose=0)), to_report(y_train))
+        parameters = net.count_params()
     elif model_name == "naive":
         prediction = rl.naive_last_value(x_test, horizon)
         parameters = 0
@@ -346,10 +387,10 @@ def run_job(job, dataframe, cache):
     os.makedirs(os.path.dirname(job_path(job)), exist_ok=True)
     np.savez_compressed(
         job_path(job),
-        prediction=np.asarray(prediction, dtype=np.float32),
-        truth=np.asarray(y_test, dtype=np.float32),
+        prediction=np.asarray(to_report(prediction), dtype=np.float32),
+        truth=np.asarray(F["truth_report"], dtype=np.float32),
         labels=np.asarray(labels, dtype="U8"),
-        dates=np.asarray([np.datetime_as_string(d, unit="D") for d in dates[test_slice]]),
+        dates=np.asarray([np.datetime_as_string(d, unit="D") for d in dates]),
         meta=json.dumps(
             {
                 "model": model_name,
@@ -363,6 +404,8 @@ def run_job(job, dataframe, cache):
                 "thresholds": thresholds,
                 "train_seconds": round(elapsed, 3),
                 "train_rmse": train_rmse,
+                "scaling": "per-fold, training rows only",
+                "scale": F["scale"],
             }
         ),
     )
@@ -385,6 +428,8 @@ def main():
                         help="run the Table 4 configuration grid")
     parser.add_argument("--best-check", action="store_true",
                         help="run the best screened LSTM config at h=2/100/200")
+    parser.add_argument("--new-models", action="store_true",
+                        help="run the MLP-on-flat-vector and recurrent-KAN comparison")
     args = parser.parse_args()
 
     global KAN_ENGINE
@@ -396,7 +441,9 @@ def main():
         tf.config.threading.set_intra_op_parallelism_threads(args.threads)
         tf.config.threading.set_inter_op_parallelism_threads(args.threads)
 
-    if args.best_check:
+    if args.new_models:
+        jobs = new_model_job_list()
+    elif args.best_check:
         jobs = best_check_job_list()
     elif args.lstm_grid:
         jobs = lstm_grid_job_list()

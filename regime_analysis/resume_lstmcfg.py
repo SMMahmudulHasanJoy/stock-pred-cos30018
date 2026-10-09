@@ -48,15 +48,10 @@ def main():
 
     spec = driver.LSTM_GRID[args.config]
     dataframe = rl.load_prices()
-    x_all, y_all, dates = rl.build_sequences(dataframe, horizon)
-    volatility, efficiency = rl.window_statistics(x_all)
-    folds = rl.walk_forward_folds(len(x_all))
-    train_slice, test_slice = folds[args.fold]
-
-    x_train, y_train = x_all[train_slice], y_all[train_slice]
-    x_test, y_test = x_all[test_slice], y_all[test_slice]
-    thresholds = rl.regime_thresholds(volatility[train_slice], efficiency[train_slice])
-    labels = rl.assign_regimes(volatility[test_slice], efficiency[test_slice], thresholds)
+    # Leak-free fold (Min-Max fitted on training rows only); see regime_lib.make_fold.
+    F = rl.make_fold(dataframe, horizon, args.fold)
+    x_train, y_train, x_test, y_test = F["x_train"], F["y_train"], F["x_test"], F["y_test"]
+    thresholds, labels, to_report = F["thresholds"], F["labels"], F["to_report"]
 
     os.makedirs(CKPT_DIR, exist_ok=True)
     stem = "%s_s%d_f%d" % (args.config, args.seed, args.fold)
@@ -100,15 +95,15 @@ def main():
         return
 
     prediction = model.predict(x_test, verbose=0)
-    train_rmse = rl.rmse(model.predict(x_train, verbose=0), y_train)
+    train_rmse = rl.rmse(to_report(model.predict(x_train, verbose=0)), to_report(y_train))
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     np.savez_compressed(
         out_path,
-        prediction=np.asarray(prediction, dtype=np.float32),
-        truth=np.asarray(y_test, dtype=np.float32),
+        prediction=np.asarray(to_report(prediction), dtype=np.float32),
+        truth=np.asarray(F["truth_report"], dtype=np.float32),
         labels=np.asarray(labels, dtype="U8"),
-        dates=np.asarray([np.datetime_as_string(d, unit="D") for d in dates[test_slice]]),
+        dates=np.asarray([np.datetime_as_string(d, unit="D") for d in F["dates_test"]]),
         meta=json.dumps({
             "model": "lstmcfg", "config": args.config, "horizon": horizon,
             "seed": args.seed, "fold": args.fold,
@@ -117,6 +112,8 @@ def main():
             "thresholds": thresholds,
             "train_seconds": round(elapsed_total, 3),
             "train_rmse": train_rmse,
+            "scaling": "per-fold, training rows only",
+            "scale": F["scale"],
             # True only if training was actually split across invocations.
             # A run whose 25 epochs fitted into a single call is identical
             # to an uninterrupted run and is recorded as such.

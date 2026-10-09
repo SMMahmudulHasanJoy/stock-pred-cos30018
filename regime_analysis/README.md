@@ -6,6 +6,16 @@ Table 7 of the Operations Research Forum submission with measured results.
 Read `FINDINGS.md` first — it explains what the analysis found and why some of
 the published numbers do not reproduce.
 
+## Revision (October 2026)
+
+`results_rev1/` holds the re-run with the scaler fitted per fold on
+training rows only (the data-leakage point both referees raised) plus two
+models added for referee 1's major comment 2: an MLP on the same flat
+vector KAN receives, and a recurrent KAN. `bash run_revision.sh` rebuilds
+it; `python compare_revision.py` prints the before/after tables. Details
+and numbers: FINDINGS.md section 6. `results/` is the submitted run, kept
+for comparison.
+
 ## Reproducing
 
 **Read this before running anything.** The repository ships with a populated

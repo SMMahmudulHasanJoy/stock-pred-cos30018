@@ -234,6 +234,74 @@ The practical consequences:
 - The LSTM and custom-engine results are unaffected: they reproduce
   byte-identically under the same protocol.
 
+## 6. Revision runs: leak-free scaling, and the flattening question
+
+Both referees asked for the Min-Max scaler to be fitted on training data
+only. Referee 1 also asked that the flattened-input question be addressed,
+either with a like-for-like baseline (an MLP on the same flat vector) or a
+KAN with a recurrent wrapper. Both are now done; everything below is from
+`results_rev1/` (600 runs, 2.4 h of compute).
+
+**The fix.** `regime_lib.make_fold` fits Min-Max on the rows a fold's
+training sequences can see, trains and predicts in that fold's scale, and
+maps predictions back to the file's whole-series scale before anything is
+saved, so numbers stay comparable with the submitted tables. The reporting
+scale is a unit convention applied after prediction; nothing about it
+reaches the model. Checks: naive is unchanged to float32 precision, and
+fold 4 (whose training rows already span the whole range) reproduces the
+submitted LSTM bit for bit.
+
+**Effect on the submitted results (pooled RMSE, mean over 3 seeds):**
+
+| model | h=1 | h=2 | h=100 | h=200 |
+|---|---|---|---|---|
+| LSTM (2-layer, 20-unit) | 0.0537 -> 0.0586 (+9%) | 0.0528 -> 0.0579 (+10%) | 0.1144 -> 0.1079 (-6%) | 0.1406 -> 0.1375 (-2%) |
+| KAN (PyKAN) | 0.0409 -> 0.0338 (-17%) | 0.0473 -> 0.0475 (0%) | 0.4462 -> 0.2418 (-46%) | 0.2654 -> 0.2764 (+4%) |
+| Naive | unchanged | unchanged | unchanged | unchanged |
+
+The conclusions survive. KAN's short-horizon advantage widens (0.034 vs
+0.059 at 1 day; DM = -11.3, p < 0.001). Naive still beats every learned
+model at 1 and 2 days, with DM statistics between +5 and +13. At 100 and
+200 days no learned model is distinguishable from naive (all p > 0.2). KAN
+still diverges on the earliest training fold at the long horizons, though
+less violently than before.
+
+**The two new models (same protocol, 3 seeds x 5 folds):**
+
+| model | input | params (h=1) | h=1 | h=2 | h=100 | h=200 |
+|---|---|---|---|---|---|---|
+| MLP (2x32 tanh, Adam, early stop) | flat, as KAN | 4,321 | 0.0337 | 0.0366 | 0.1237 | 0.1154 |
+| Recurrent KAN (KANLayer as RNN cell, RMSprop 25 ep) | sequence, as LSTM | 4,181 | 0.0448 | 0.0412 | 0.1236 | 0.1626 |
+| KAN (PyKAN), for reference | flat | 54,540 | 0.0338 | 0.0475 | 0.2418 | 0.2764 |
+| LSTM (2-layer, 20-unit), for reference | sequence | 5,381 | 0.0586 | 0.0579 | 0.1079 | 0.1375 |
+
+What this says about referee 1's comment:
+
+1. *Flattening is not what separates KAN from LSTM.* A plain MLP on the
+   identical flat vector matches KAN at 1 day (0.0337 vs 0.0338) and beats
+   it at 2 days (DM p = 0.012), and both flat models beat the order-aware
+   LSTM at short horizons by a wide margin. If losing temporal order were
+   the handicap, the flat MLP could not do this.
+2. *Giving KAN recurrence does not rescue it.* The recurrent KAN is worse
+   than flat KAN at 1 day (0.045 vs 0.034, p < 0.001), better at 2 days,
+   level with the MLP at 100 days and worst of all at 200 days. It does
+   beat the LSTM at 1 and 2 days (p < 0.001), so a recurrent cell built
+   from KAN layers is competitive with an LSTM cell, which is a result in
+   its own right, but recurrence is not the missing ingredient.
+3. The honest reframing the referee offered is the right one: at short
+   horizons on this data, static approximation on a flat window is at
+   least as good as recurrence, and nothing beats persistence.
+
+Caveat on training budgets: the MLP is trained with Adam and early
+stopping (up to 200 epochs); LSTM and recurrent KAN use the paper's
+RMSprop 25-epoch budget; KAN its 10 L-BFGS steps. A pilot of the MLP on
+the LSTM's budget scored 0.098 at 1 day, three times worse, so training
+budget matters at least as much as architecture here. The paper should
+say so rather than hide it.
+
+Re-run: `bash run_revision.sh` (resumable; call until every list reports
+0 remaining). Compare: `python compare_revision.py`.
+
 ## 5. What I would suggest to the team
 
 The cosmetic Table 7 fix can go in immediately. The rest is a bigger

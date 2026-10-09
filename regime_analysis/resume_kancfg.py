@@ -42,15 +42,10 @@ def build_job_state(config_name, seed, fold, horizon):
 
     spec = driver.KAN_GRID[config_name]
     dataframe = rl.load_prices()
-    x_all, y_all, dates = rl.build_sequences(dataframe, horizon)
-    volatility, efficiency = rl.window_statistics(x_all)
-    folds = rl.walk_forward_folds(len(x_all))
-    train_slice, test_slice = folds[fold]
-
-    x_train, y_train = x_all[train_slice], y_all[train_slice]
-    x_test, y_test = x_all[test_slice], y_all[test_slice]
-    thresholds = rl.regime_thresholds(volatility[train_slice], efficiency[train_slice])
-    labels = rl.assign_regimes(volatility[test_slice], efficiency[test_slice], thresholds)
+    # Leak-free fold (Min-Max fitted on training rows only); see regime_lib.make_fold.
+    F = rl.make_fold(dataframe, horizon, fold)
+    x_train, y_train, x_test, y_test = F["x_train"], F["y_train"], F["x_test"], F["y_test"]
+    thresholds, labels = F["thresholds"], F["labels"]
 
     # Seed numpy as well as torch: pykan's fit() uses np.random.choice to
     # permute the training rows each step. See the note in driver.py.
@@ -70,10 +65,13 @@ def build_job_state(config_name, seed, fold, horizon):
     meta = {
         "x_train_n": int(len(x_train)),
         "labels": labels,
-        "dates": dates[test_slice],
+        "dates": F["dates_test"],
         "thresholds": thresholds,
         "y_train": y_train,
         "y_test": y_test,
+        "truth_report": F["truth_report"],
+        "to_report": F["to_report"],
+        "scale": F["scale"],
     }
     return net, data, meta
 
@@ -162,14 +160,14 @@ def main():
     with torch.no_grad():
         prediction = net(data["test_input"]).cpu().numpy()
         train_prediction = net(data["train_input"]).cpu().numpy()
-    train_rmse = rl.rmse(train_prediction, meta["y_train"])
+    train_rmse = rl.rmse(meta["to_report"](train_prediction), meta["to_report"](meta["y_train"]))
     parameters = sum(p.numel() for p in net.parameters() if p.requires_grad)
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     np.savez_compressed(
         out_path,
-        prediction=np.asarray(prediction, dtype=np.float32),
-        truth=np.asarray(meta["y_test"], dtype=np.float32),
+        prediction=np.asarray(meta["to_report"](prediction), dtype=np.float32),
+        truth=np.asarray(meta["truth_report"], dtype=np.float32),
         labels=np.asarray(meta["labels"], dtype="U8"),
         dates=np.asarray([np.datetime_as_string(d, unit="D") for d in meta["dates"]]),
         meta=json.dumps({
@@ -179,6 +177,7 @@ def main():
             "parameters": int(parameters), "thresholds": meta["thresholds"],
             "train_seconds": round(elapsed_total, 3),
             "train_rmse": train_rmse,
+            "scaling": "per-fold, training rows only", "scale": meta["scale"],
             "resumed": True,
         }),
     )

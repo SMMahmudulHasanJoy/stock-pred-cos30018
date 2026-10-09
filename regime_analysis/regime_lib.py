@@ -113,6 +113,74 @@ def build_sequences(df, horizon, lookback=LOOKBACK):
 # --------------------------------------------------------------------------
 # regime features and labelling
 # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# per-fold scaling (leak-free)
+# --------------------------------------------------------------------------
+def fold_scaling(df, horizon, train_slice, lookback=LOOKBACK):
+    """
+    Min-Max parameters fitted on the rows a fold's training sequences can see.
+
+    The CSV on disk is already Min-Max scaled over the whole series, which is
+    the data-leakage issue both referees raised: the scaler had seen the test
+    period. Re-fitting per fold on training rows only removes that. Because a
+    Min-Max fit is invariant to a prior affine transform, fitting it on the
+    pre-scaled file is identical to fitting it on raw prices, so the model sees
+    exactly what it would see with raw data and training-only scaling.
+
+    Returns (lo, hi): Series indexed by FEATURES. The last training row is the
+    final target row of the last training sequence, so no test-period row
+    contributes.
+    """
+    last_row = (lookback - 1) + (train_slice.stop - 1) + horizon
+    train_rows = df[FEATURES].iloc[: last_row + 1]
+    lo, hi = train_rows.min(), train_rows.max()
+    hi = hi.where(hi > lo, lo + 1.0)  # guard against a constant column
+    return lo, hi
+
+
+def make_fold(df, horizon, fold, lookback=LOOKBACK, n_folds=N_FOLDS):
+    """
+    Everything one training job needs for one fold, with leak-free scaling.
+
+    Returns a dict with x_train, y_train, x_test, y_test in FOLD scale (what the
+    model trains and predicts on), truth_report (y_test in the common reporting
+    scale, i.e. the file's units), labels and thresholds, and to_report(pred), a
+    function that maps fold-scale Close predictions back to the reporting scale.
+
+    The reporting scale is the whole-series Min-Max of the CSV. It is only a
+    unit convention applied after prediction; nothing about it reaches the model.
+    """
+    x_all, y_all, dates = build_sequences(df, horizon, lookback)
+    folds = walk_forward_folds(len(x_all), n_folds)
+    train_slice, test_slice = folds[fold]
+
+    # regimes: ratio statistics, invariant to the scale choice; thresholds train-only
+    volatility, efficiency = window_statistics(x_all)
+    thresholds = regime_thresholds(volatility[train_slice], efficiency[train_slice])
+    labels = assign_regimes(volatility[test_slice], efficiency[test_slice], thresholds)
+
+    lo, hi = fold_scaling(df, horizon, train_slice, lookback)
+    scaled = df.copy()
+    scaled[FEATURES] = (df[FEATURES] - lo) / (hi - lo)
+    xs, ys, _ = build_sequences(scaled, horizon, lookback)
+
+    c_lo, c_hi = float(lo["Close"]), float(hi["Close"])
+
+    def to_report(pred):
+        return np.asarray(pred, dtype=np.float64) * (c_hi - c_lo) + c_lo
+
+    return {
+        "x_train": xs[train_slice], "y_train": ys[train_slice],
+        "x_test": xs[test_slice], "y_test": ys[test_slice],
+        "truth_report": y_all[test_slice],
+        "dates_test": dates[test_slice],
+        "labels": labels, "thresholds": thresholds,
+        "to_report": to_report,
+        "scale": {"close_lo": c_lo, "close_hi": c_hi, "last_train_row": int((lookback - 1) + (train_slice.stop - 1) + horizon)},
+        "train_slice": train_slice, "test_slice": test_slice,
+    }
+
+
 def window_statistics(X):
     """
     Volatility and Kaufman efficiency ratio for every input window.

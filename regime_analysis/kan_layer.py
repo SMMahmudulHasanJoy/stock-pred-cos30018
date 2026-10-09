@@ -168,3 +168,71 @@ def fit_lbfgs(model, x, y, max_iterations=10):
     )
     assign(result.x)
     return {"final_loss": float(result.fun), "iterations": int(result.nit)}
+
+
+# --------------------------------------------------------------------------
+# Recurrent KAN (referee 1, major comment 2)
+# --------------------------------------------------------------------------
+class KANRNNCell(tf.keras.layers.Layer):
+    """
+    A KAN layer used as a recurrent cell, so the network sees the look-back
+    window one day at a time and keeps temporal order, like the LSTM does.
+
+        h_t = KAN([x_t, h_{t-1}])
+
+    The cell concatenates the current day's features with the previous hidden
+    state and passes them through one KANLayer (learnable spline on every
+    edge). The hidden state is bounded by the tanh inside KANLayer. This is
+    the simplest "recurrent wrapper" around a KAN; TKAN-style designs add
+    LSTM-like gating on top of the same idea.
+    """
+
+    def __init__(self, units, grid_size=3, spline_order=3, seed=0, **kwargs):
+        super().__init__(**kwargs)
+        self.units = units
+        self.state_size = units
+        self.output_size = units
+        self.kan = KANLayer(units, grid_size, spline_order, seed=seed)
+
+    def build(self, input_shape):
+        self.kan.build((None, int(input_shape[-1]) + self.units))
+        super().build(input_shape)
+
+    def call(self, inputs, states):
+        prev = states[0]
+        h = tf.tanh(self.kan(tf.concat([inputs, prev], axis=-1)))
+        return h, [h]
+
+
+def build_recurrent_kan(lookback, n_features, horizon, units=20, grid_size=3,
+                        spline_order=3, seed=0):
+    """
+    Sequence model: KANRNNCell over the window, then a KAN read-out to the
+    H-step forecast. Trained with the same optimiser and budget as the LSTM
+    (RMSprop, 25 epochs, batch 30) so the comparison with LSTM differs only
+    in what sits inside the recurrent cell.
+    """
+    tf.keras.utils.set_random_seed(seed)
+    inputs = tf.keras.Input(shape=(lookback, n_features))
+    h = tf.keras.layers.RNN(KANRNNCell(units, grid_size, spline_order, seed=seed))(inputs)
+    outputs = KANLayer(horizon, grid_size, spline_order, seed=seed + 1)(h)
+    model = tf.keras.Model(inputs, outputs)
+    model.compile(loss="mean_squared_error", optimizer="RMSprop")
+    return model
+
+
+def build_mlp(input_dim, horizon, width=32, seed=0):
+    """
+    Plain MLP on the same flattened (L * |F|) vector KAN receives: the
+    like-for-like baseline referee 1 asked for. Trained with Adam and early
+    stopping on the training loss, which is a competent (not tuned) baseline.
+    """
+    tf.keras.utils.set_random_seed(seed)
+    model = tf.keras.Sequential([
+        tf.keras.layers.Input(shape=(input_dim,)),
+        tf.keras.layers.Dense(width, activation="tanh"),
+        tf.keras.layers.Dense(width, activation="tanh"),
+        tf.keras.layers.Dense(horizon),
+    ])
+    model.compile(loss="mean_squared_error", optimizer=tf.keras.optimizers.Adam(1e-3))
+    return model
