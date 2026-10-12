@@ -26,7 +26,7 @@ def tbl(rows,colw=None,fs=8.5):
 def e(x): return "0 (exact)" if x<1e-4 else f"{x:.4f}"
 S=[]
 S+=[P("KAN approximation of S1 and S2: complete results",ParagraphStyle("T",parent=ss["Title"],fontSize=19,spaceAfter=4)),
-    P("Experiments A (single edge, linear splines), B (single edge, cubic splines) and C (one hidden layer). Every fitted configuration is shown with its full curve, its error at every point, and its summary numbers. Data and generator from Nadia's ExampleForORF.m.",ParagraphStyle("st",parent=B,textColor=colors.HexColor("#555555"),spaceAfter=10)),
+    P("Experiments A (single edge, linear splines), B (single edge, cubic splines) and C (one hidden layer). Every fitted configuration is shown with its full curve, its error at every point, and its summary numbers. Data and generator: ExampleForORF.m.",ParagraphStyle("st",parent=B,textColor=colors.HexColor("#555555"),spaceAfter=10)),
     P("Setup",H2),
     tbl([["Item","Value"],["Targets","S1: knots [0,2,4,6,8];  S2: knots [0,3,5,6,7];  slopes [2,-1,4,-3,-1] for both;  S(t) = sum_j A_j * max(0, t - theta_j)"],
          ["Sample","1001 points, t = 0, 0.01, ..., 10 (files S1.txt, S2.txt; regenerated from the script, match to 4e-15)"],
