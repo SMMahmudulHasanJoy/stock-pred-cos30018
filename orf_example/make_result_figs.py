@@ -17,6 +17,11 @@ for exp,width,grid,k in [(f["exp"],f["width"],f["grid"],f["k"]) for f in F if f[
         ax[1,j].plot(T,e,color=BLUE,lw=1); ax[1,j].axhline(0,color="k",lw=.5); ax[1,j].fill_between(T,e,0,color=BLUE,alpha=.15)
         for kn in KN[fn]: ax[1,j].axvline(kn,color=GREY,lw=.6,ls=":")
         ax[1,j].set_ylabel("KAN - target"); ax[1,j].set_xlabel("t")
+        ax[1,j].set_ylim(-1.6,1.6)          # same scale on every error panel
+        if r["max_err"]<1e-4:
+            ax[1,j].text(5,1.1,"exact fit: error below 0.0001 everywhere\n(what remains is floating-point noise, about 1e-6)",ha="center",fontsize=8,color="#3a8f5c",bbox=dict(fc="white",ec="#3a8f5c",lw=.6))
+        elif r["max_err"]<0.1:
+            ax[1,j].text(5,1.1,f"small error: worst {r['max_err']:.4f} at t={r['argmax_t']:.2f}\n(too small to see at this scale)",ha="center",fontsize=8,color="#555555",bbox=dict(fc="white",ec="#999999",lw=.6))
     kind="straight-line pieces (k=1)" if k==1 else "smooth cubic pieces (k=3)"
     fig.suptitle(f"KAN width {w(width)},  grid = {grid} intervals,  {kind}     (dotted grey = target's knots; faint green = KAN's grid lines)",fontsize=10)
     fig.tight_layout(); fig.savefig(f"results_figs/fit_{exp}_w{'-'.join(map(str,w(width)))}_g{grid}_k{k}.png",dpi=140); plt.close(fig)

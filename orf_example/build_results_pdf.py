@@ -52,7 +52,7 @@ for exp,title,sel in (("A","Experiment A: single edge [1,1], linear splines (k=1
                       ("B","Experiment B: single edge [1,1], cubic splines (k=3)",lambda f:f["exp"]=="A" and f["k"]==3),
                       ("C","Experiment C: one hidden layer, linear splines (k=1)",lambda f:f["exp"]=="C")):
     S.append(P(title,H2))
-    rws=[["KAN width","Grid","Params","S1 worst","S1 RMSE","S2 worst","S2 RMSE","S2/S1 worst ratio"]]
+    rws=[["KAN width","Grid","Params","S1 worst","S1 RMSE","S2 worst","S2 RMSE","S2 / S1 worst"]]
     seen=[]
     for f in F:
         if not sel(f) or f["fn"]!="S1": continue
@@ -63,7 +63,7 @@ for exp,title,sel in (("A","Experiment A: single edge [1,1], linear splines (k=1
 
 # per-configuration pages
 S+=[PageBreak(),P("3. Every fit, one configuration per figure",H1),
-    P("Top row: target (black) and KAN fit (orange dashed), with the target's knots (dotted grey) and the KAN's grid lines (faint green). Bottom row: the error KAN - target at every point. Note the vertical scale of the error panels differs between figures; exact fits show noise of order 1e-6.")]
+    P("Top row: target (black) and KAN fit (orange dashed), with the target's knots (dotted grey) and the KAN's grid lines (faint green). Bottom row: the error KAN - target at every point. Every error panel uses the same vertical scale, -1.6 to +1.6, so figures can be compared directly: a flat line at zero is a perfect fit, a wave is a real error. Where the error is too small to show at this scale, the panel says so and gives the number.")]
 order=[f for f in F if f["fn"]=="S1"]
 for f in order:
     exp="B" if (f["exp"]=="A" and f["k"]==3) else f["exp"]
