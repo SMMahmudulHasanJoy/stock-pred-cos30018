@@ -64,6 +64,7 @@ MANIFEST = os.path.join(RESULTS_DIR, "manifest.json")
 KAN_ENGINE = "custom"
 
 HORIZONS = [1, 2, 100, 200]
+MT_HORIZONS = [1, 2, 5, 10, 100, 200]  # multi-ticker check (--multi-ticker)
 SEEDS = [0, 100, 200]
 LSTM_CONFIGS = {
     "100u-linear": {"units": 100, "activation": "linear", "layers": 4},
@@ -177,6 +178,36 @@ def new_model_job_list():
     return jobs
 
 
+def multi_ticker_job_list():
+    """Multi-ticker robustness check (naive vs LSTM vs KAN).
+
+    The three models of the paper's main comparison, at six horizons
+    including the 5- and 10-day middle ground, three seeds, five folds, on
+    whichever price file REGIME_DATA_CSV points at. Run once per ticker with
+    REGIME_RESULTS_DIR set to a ticker-specific directory:
+
+        REGIME_DATA_CSV=../data/TSLA_2020-01-01_2023-08-01.csv \\
+        REGIME_RESULTS_DIR=results_mt/TSLA python driver.py --multi-ticker
+
+    LSTM is the L2-20-tanh configuration selected in the Table 4 screening
+    (job type lstmcfg, so the same file name as the CBA runs); KAN is the
+    pykan engine used in the paper. For CBA the 1/2/100/200-day runs already
+    in results_rev1 are reused and only the 5- and 10-day runs are added.
+    """
+    jobs = []
+    for horizon in MT_HORIZONS:
+        for fold in range(rl.N_FOLDS):
+            jobs.append(("naive", "-", horizon, 0, fold))
+    for horizon in MT_HORIZONS:
+        for seed in SEEDS:
+            for fold in range(rl.N_FOLDS):
+                jobs.append(("lstmcfg", "L2-20-tanh", horizon, seed, fold))
+        for seed in SEEDS:
+            for fold in range(rl.N_FOLDS):
+                jobs.append(("kan", "-", horizon, seed, fold))
+    return jobs
+
+
 def best_check_job_list():
     """The best config from the new screening, at the remaining horizons."""
     jobs = []
@@ -198,14 +229,14 @@ def estimate_seconds(job):
         spec = LSTM_GRID[config]
         return 4.0 + 0.09 * spec["units"] * spec["layers"]
     if model == "kan":
-        return {1: 4.0, 2: 4.0, 100: 8.0, 200: 14.0}[horizon]
+        return {1: 4.0, 2: 4.0, 100: 8.0, 200: 14.0}.get(horizon, 6.0)
     if model == "mlp":
         return 8.0
     if model == "rkan":
         return 30.0
     if config == "100u-linear":
         return 34.0
-    return {1: 14.0, 2: 14.0, 100: 16.0, 200: 18.0}[horizon]
+    return {1: 14.0, 2: 14.0, 100: 16.0, 200: 18.0}.get(horizon, 15.0)
 
 
 def job_key(job):
@@ -430,10 +461,13 @@ def main():
                         help="run the best screened LSTM config at h=2/100/200")
     parser.add_argument("--new-models", action="store_true",
                         help="run the MLP-on-flat-vector and recurrent-KAN comparison")
+    parser.add_argument("--multi-ticker", action="store_true",
+                        help="naive / LSTM (L2-20-tanh) / KAN (pykan) at horizons "
+                             "1,2,5,10,100,200 on the file in REGIME_DATA_CSV")
     args = parser.parse_args()
 
     global KAN_ENGINE
-    KAN_ENGINE = args.kan_engine
+    KAN_ENGINE = "pykan" if args.multi_ticker else args.kan_engine
 
     if args.threads:
         import tensorflow as tf
@@ -441,7 +475,9 @@ def main():
         tf.config.threading.set_intra_op_parallelism_threads(args.threads)
         tf.config.threading.set_inter_op_parallelism_threads(args.threads)
 
-    if args.new_models:
+    if args.multi_ticker:
+        jobs = multi_ticker_job_list()
+    elif args.new_models:
         jobs = new_model_job_list()
     elif args.best_check:
         jobs = best_check_job_list()

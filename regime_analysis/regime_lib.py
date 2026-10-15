@@ -47,11 +47,14 @@ N_FOLDS = 5
 INITIAL_TRAIN_FRACTION = 0.40
 REGIMES = ["Normal", "Volatile", "Trending"]
 
-DATA_CSV = os.environ.get(
-    "REGIME_DATA_CSV",
-    "/sessions/adoring-bold-cannon/mnt/stock-pred-cos30018/"
-    "v0.2/MLP/data/CBA.AX_2020-01-01_2023-08-01.csv",
+_HERE = os.path.dirname(os.path.abspath(__file__))
+# Price file. Override with REGIME_DATA_CSV to run the same protocol on another
+# ticker (see data/make_ticker_csv.py and driver.py --multi-ticker).
+DATA_CSV = os.environ.get("REGIME_DATA_CSV") or os.path.join(
+    _HERE, "..", "v0.2", "MLP", "data", "CBA.AX_2020-01-01_2023-08-01.csv"
 )
+if not os.path.isabs(DATA_CSV):
+    DATA_CSV = os.path.join(os.getcwd(), DATA_CSV)
 
 
 # --------------------------------------------------------------------------
