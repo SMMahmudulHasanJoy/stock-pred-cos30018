@@ -141,7 +141,10 @@ def fold_scaling(df, horizon, train_slice, lookback=LOOKBACK):
     return lo, hi
 
 
-def make_fold(df, horizon, fold, lookback=LOOKBACK, n_folds=N_FOLDS):
+PURGE = os.environ.get("REGIME_PURGE", "0") == "1"
+
+
+def make_fold(df, horizon, fold, lookback=LOOKBACK, n_folds=N_FOLDS, purge=None):
     """
     Everything one training job needs for one fold, with leak-free scaling.
 
@@ -152,15 +155,39 @@ def make_fold(df, horizon, fold, lookback=LOOKBACK, n_folds=N_FOLDS):
 
     The reporting scale is the whole-series Min-Max of the CSV. It is only a
     unit convention applied after prediction; nothing about it reaches the model.
+
+    purge (default: env REGIME_PURGE=1, else False)
+        Direct multi-step targets overlap: training sequence i has targets at
+        rows end_i+1 .. end_i+h, so the last training sequences carry labels
+        that lie AFTER the forecast origin of the first test windows. For h=1
+        this is harmless (the last training label is the first test origin,
+        which is known at that time); for h=100/200 it means every test window
+        in a fold shares target rows with training labels, and the per-fold
+        scaler also sees those rows. This is the look-ahead that purged
+        cross-validation removes (Lopez de Prado 2018, ch. 7; Bergmeir &
+        Benitez 2012). With purge=True the training set is cut back to the
+        sequences whose LAST target row is <= the first test window's origin
+        row, i.e. the last h-1 training sequences are dropped, and the scaler
+        is fitted on the same reduced row range. Test windows are unchanged, so
+        purged and unpurged runs are scored on identical targets.
     """
+    if purge is None:
+        purge = PURGE
     x_all, y_all, dates = build_sequences(df, horizon, lookback)
     folds = walk_forward_folds(len(x_all), n_folds)
     train_slice, test_slice = folds[fold]
 
-    # regimes: ratio statistics, invariant to the scale choice; thresholds train-only
+    # regimes: ratio statistics, invariant to the scale choice; thresholds train-only.
+    # Computed from the INPUT windows of all pre-test sequences (their inputs end
+    # before the first test origin, so they are known at test time) and therefore
+    # not affected by purging; this keeps test labels identical across protocols.
     volatility, efficiency = window_statistics(x_all)
     thresholds = regime_thresholds(volatility[train_slice], efficiency[train_slice])
     labels = assign_regimes(volatility[test_slice], efficiency[test_slice], thresholds)
+
+    if purge:
+        # keep sequence i only if (lookback-1) + i + h <= (lookback-1) + test_start
+        train_slice = slice(0, max(1, test_slice.start - horizon + 1))
 
     lo, hi = fold_scaling(df, horizon, train_slice, lookback)
     scaled = df.copy()
@@ -181,6 +208,7 @@ def make_fold(df, horizon, fold, lookback=LOOKBACK, n_folds=N_FOLDS):
         "to_report": to_report,
         "scale": {"close_lo": c_lo, "close_hi": c_hi, "last_train_row": int((lookback - 1) + (train_slice.stop - 1) + horizon)},
         "train_slice": train_slice, "test_slice": test_slice,
+        "purged": bool(purge),
     }
 
 

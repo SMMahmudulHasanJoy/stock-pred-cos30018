@@ -30,8 +30,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "results_mt")
 HORIZONS = [1, 2, 5, 10, 100, 200]
 SEEDS = [0, 100, 200]
+# MT_PURGED=1 switches to the purged re-run (results_purged/, see AUDIT.md)
+PURGED = os.environ.get("MT_PURGED", "0") == "1"
+if PURGED:
+    OUT = os.path.join(HERE, "results_purged")
 TICKERS = {
-    "CBA.AX": {"dir": os.path.join(HERE, "results_rev1"), "label": "CBA (bank, benchmark)"},
+    "CBA.AX": {"dir": os.path.join(OUT, "CBA") if PURGED else os.path.join(HERE, "results_rev1"), "label": "CBA (bank, benchmark)"},
     "TSLA": {"dir": os.path.join(OUT, "TSLA"), "label": "TSLA (volatile)"},
     "LLY": {"dir": os.path.join(OUT, "LLY"), "label": "LLY (stable trend)"},
 }

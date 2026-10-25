@@ -437,6 +437,7 @@ def run_job(job, dataframe, cache):
                 "train_rmse": train_rmse,
                 "scaling": "per-fold, training rows only",
                 "scale": F["scale"],
+                "purged": F.get("purged", False),
             }
         ),
     )
