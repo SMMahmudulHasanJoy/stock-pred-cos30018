@@ -134,8 +134,17 @@ def fig_fits(tk, m, color, out, budgets):
                 len(rs), ", ".join("%.4f" % q["rmse"] for q in rs))), fontsize=9)
         ax.legend(fontsize=7, frameon=False, loc="upper left"); ax.grid(alpha=0.3, linewidth=0.4); ax.set_ylim(-0.05, 1.08)
         axe = axes[row, 1]
-        axe.plot(t, p - y, color=color, linewidth=0.7); axe.axhline(0, color="k", linewidth=0.5)
+        e = p - y
+        axe.fill_between(t, 0, e, where=e >= 0, color="#c0392b", alpha=0.45, linewidth=0, label="fit above price")
+        axe.fill_between(t, 0, e, where=e < 0, color="#2e86c1", alpha=0.45, linewidth=0, label="fit below price")
+        axe.axhline(0, color="k", linewidth=0.5)
+        w = 20
+        roll = np.sqrt(np.convolve(e ** 2, np.ones(w) / w, mode="same"))
+        axe.plot(t, roll, color="k", linewidth=1.0, label="20-day rolling RMSE")
+        axe.plot(t, -roll, color="k", linewidth=1.0)
         axe.set_ylim(-0.3, 0.3); axe.set_title("error = fit - close (fixed scale +-0.3)", fontsize=9); axe.grid(alpha=0.3, linewidth=0.4)
+        if row == 0:
+            axe.legend(fontsize=6, frameon=False, loc="upper right", ncol=3)
     axes[-1, 0].set_xlabel("t (0 = 2 Jan 2020, 1 = 31 Jul 2023)"); axes[-1, 1].set_xlabel("t")
     fig.suptitle("%s: %s" % (tk, m), fontsize=11)
     fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
@@ -250,7 +259,7 @@ def build(key):
     S.append(Spacer(1, 8))
     S.append(Paragraph("7. The fits themselves (following pages)", h2))
     S.append(Paragraph("For every ticker, model and budget: left, the fitted curve over the actual series (best seed where there are seeds; "
-                       "all seed RMSEs in the title); right, the error fit - close on a fixed +-0.3 scale so panels are comparable. "
+                       "all seed RMSEs in the title); right, the error fit - close on a fixed +-0.3 scale so panels are comparable: red shading where the fit sits above the price, blue where below, and the black envelope is the 20-day rolling RMSE (+-), i.e. the local size of the error with the day-to-day jitter smoothed out. "
                        "Vertical lines in spline panels are knot positions.", small))
     first = True
     for tk in A.TICKERS:
