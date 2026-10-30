@@ -9,15 +9,15 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 import approx_study as A
 
-MODELS = ["lsq", "fks", "kan11", "kan1h1", "mlp", "fmlp"]
+MODELS = ["lsq", "fks", "kan11", "kan1h1", "kan1hh1", "mlp", "fmlp"]
 LABEL = {"lsq": "LSQ cubic spline (fixed knots)", "fks": "free-knot cubic spline",
-         "kan11": "KAN [1,1] (one spline edge)", "kan1h1": "KAN [1,h,1] (hidden layer)",
+         "kan11": "KAN [1,1] (one spline edge)", "kan1h1": "KAN [1,h,1] (hidden layer)", "kan1hh1": "KAN [1,h,h,1] (two hidden layers)",
          "mlp": "MLP of t (tanh)", "fmlp": "Fourier-feature MLP of t"}
-COL = {"lsq": "#555555", "fks": "#000000", "kan11": "#c46a3f", "kan1h1": "#e0a070",
+COL = {"lsq": "#555555", "fks": "#000000", "kan11": "#c46a3f", "kan1h1": "#e0a070", "kan1hh1": "#8c4a1f",
        "mlp": "#2f6f9f", "fmlp": "#5fb0e0"}
 
 recs = [json.load(open(p)) for p in glob.glob(os.path.join(HERE, "fits", "*.json"))]
-assert len(recs) == 210, len(recs)
+assert len(recs) == 255, len(recs)
 by = defaultdict(list)
 for r in recs:
     by[(r["ticker"], r["model"], r["budget"])].append(r)
@@ -76,7 +76,7 @@ fig.tight_layout(); fig.savefig(os.path.join(HERE, "approx_rmse_vs_params.png"),
 
 # ---- figure: fits at budget 60 on CBA
 t, y = A.load("CBA.AX")
-fig, axes = plt.subplots(3, 2, figsize=(13, 9), sharex=True, sharey=True)
+fig, axes = plt.subplots(4, 2, figsize=(13, 12), sharex=True, sharey=True)
 for ax, m in zip(axes.ravel(), MODELS):
     r = sorted(by[("CBA.AX", m, 60)], key=lambda r: r["rmse"])[0]
     ax.plot(t, y, color="#999999", linewidth=0.8, label="CBA close (scaled)")
