@@ -34,7 +34,7 @@ COMPARISONS = [("kan11", "mlp", "KAN [1,1] - MLP of t"),
 NO_SPLINE = os.environ.get("NO_SPLINE", "0") == "1"
 if NO_SPLINE:
     COMPARISONS = [c for c in COMPARISONS if "lsq" not in c[:2]]
-SUFFIX = "_nospline" if NO_SPLINE else ""
+SUFFIX = "_KAN_vs_MLP" if NO_SPLINE else ""
 METRICS = [("rmse", "RMSE"), ("max_err", "max |err|"), ("seconds", "seconds")]
 
 
