@@ -30,6 +30,11 @@ COMPARISONS = [("kan11", "mlp", "KAN [1,1] - MLP of t"),
                ("kan11", "lsq", "KAN [1,1] - LSQ spline"),
                ("kan1h1", "kan11", "KAN [1,h,1] - KAN [1,1]"),
                ("fmlp", "mlp", "Fourier MLP - MLP of t")]
+# NO_SPLINE=1 drops the least-squares spline comparison and writes *_nospline files
+NO_SPLINE = os.environ.get("NO_SPLINE", "0") == "1"
+if NO_SPLINE:
+    COMPARISONS = [c for c in COMPARISONS if "lsq" not in c[:2]]
+SUFFIX = "_nospline" if NO_SPLINE else ""
 METRICS = [("rmse", "RMSE"), ("max_err", "max |err|"), ("seconds", "seconds")]
 
 
@@ -70,11 +75,11 @@ for a, b, label in COMPARISONS:
             tests.append([label, mlabel, tk, len(v), np.mean(v), t, p])
 
 import csv
-with open(os.path.join(HERE, "differences.csv"), "w", newline="") as f:
+with open(os.path.join(HERE, "differences" + SUFFIX + ".csv"), "w", newline="") as f:
     w = csv.writer(f); w.writerow(["comparison", "ticker", "budget", "seed", "params_A", "params_B", "rmse_A", "maxerr_A", "sec_A", "rmse_B", "maxerr_B", "sec_B", "d_rmse", "d_maxerr", "d_sec"]); w.writerows(rows)
-with open(os.path.join(HERE, "differences_summary.csv"), "w", newline="") as f:
+with open(os.path.join(HERE, "differences_summary" + SUFFIX + ".csv"), "w", newline="") as f:
     w = csv.writer(f); w.writerow(["comparison", "ticker", "budget", "params_A", "params_B", "d_rmse_mean", "d_rmse_sd", "n", "d_maxerr_mean", "d_maxerr_sd", "n", "d_sec_mean", "d_sec_sd", "n", "rmse_A", "maxerr_A", "sec_A", "rmse_B", "maxerr_B", "sec_B"]); w.writerows(cells)
-with open(os.path.join(HERE, "differences_ttests.csv"), "w", newline="") as f:
+with open(os.path.join(HERE, "differences_ttests" + SUFFIX + ".csv"), "w", newline="") as f:
     w = csv.writer(f); w.writerow(["comparison", "metric", "scope", "n_cells", "mean_difference", "t_statistic", "p_value"]); w.writerows(tests)
 
 # ---- figure: per-budget differences and pooled 95% CI
@@ -82,7 +87,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 PM = u"\u00b1"
-fig, axes = plt.subplots(1, 3, figsize=(14, 4.2))
+fig, axes = plt.subplots(1, 3, figsize=(14 if not NO_SPLINE else 12.5, 4.2))
 colors_ = {"CBA.AX": "#2f6f9f", "TSLA": "#c46a3f", "LLY": "#4a9a4a"}
 mi = {"rmse": 5, "max_err": 8, "seconds": 11}
 for ax, (m, ml) in zip(axes, METRICS):
@@ -98,7 +103,7 @@ for ax, (m, ml) in zip(axes, METRICS):
     ax.set_xticks(xs); ax.set_xticklabels([l.replace(" - ", "\n- ") for _, _, l in COMPARISONS], fontsize=7.5)
     ax.set_title("difference in %s (A - B); below 0 = A better" % ml, fontsize=9); ax.grid(alpha=0.3, axis="y")
 axes[0].legend(fontsize=7, frameon=False)
-fig.tight_layout(); fig.savefig(os.path.join(HERE, "differences_plot.png"), dpi=170); plt.close(fig)
+fig.tight_layout(); fig.savefig(os.path.join(HERE, "differences_plot" + SUFFIX + ".png"), dpi=170); plt.close(fig)
 
 # ---- PDF
 from reportlab.lib import colors
@@ -168,17 +173,22 @@ outcomes = []
 r = pooled("KAN [1,1] - MLP of t", "RMSE"); outcomes.append("KAN [1,1] vs plain MLP: the KAN fits better. Mean RMSE difference %s (t = %.2f, p %s); negative in 14 of 15 cells." % (f4(r[4]), r[5], ("= " + fp(r[6])) if r[6] >= 1e-4 else fp(r[6])))
 r = pooled("KAN [1,1] - Fourier MLP", "RMSE"); mb, tb_, pb = big_only("KAN [1,1] - Fourier MLP")
 outcomes.append("KAN [1,1] vs Fourier MLP: pooled over all budgets the KAN is slightly better (mean %s, t = %.2f, p = %s), but the difference comes from the 15- and 30-parameter cells; from 60 parameters upward the two tie (mean %s, t = %.2f, p = %.2f)." % (f4(r[4]), r[5], fp(r[6]), f4(mb), tb_, pb))
-r = pooled("KAN [1,1] - LSQ spline", "RMSE"); mb, tb_, pb = big_only("KAN [1,1] - LSQ spline")
-outcomes.append("KAN [1,1] vs least-squares spline: the spline is marginally better pooled (mean %s, t = %.2f, p = %s), again only at the two smallest budgets; from 60 upward the two agree (mean %s, p = %.2f)." % (f4(r[4]), r[5], fp(r[6]), f4(mb), pb))
+if not NO_SPLINE:
+    r = pooled("KAN [1,1] - LSQ spline", "RMSE"); mb, tb_, pb = big_only("KAN [1,1] - LSQ spline")
+    outcomes.append("KAN [1,1] vs least-squares spline: the spline is marginally better pooled (mean %s, t = %.2f, p = %s), again only at the two smallest budgets; from 60 upward the two agree (mean %s, p = %.2f)." % (f4(r[4]), r[5], fp(r[6]), f4(mb), pb))
 r = pooled("KAN [1,h,1] - KAN [1,1]", "RMSE"); outcomes.append("KAN [1,h,1] vs KAN [1,1]: the hidden layer is worse. Mean RMSE difference %s (t = %.2f, p %s); positive in every cell." % (f4(r[4]), r[5], fp(r[6]) if r[6] < 1e-4 else "= " + fp(r[6])))
 r = pooled("Fourier MLP - MLP of t", "RMSE"); outcomes.append("Fourier MLP vs plain MLP: the Fourier features help. Mean RMSE difference %s (t = %.2f, p = %s)." % (f4(r[4]), r[5], fp(r[6])))
-r = pooled("KAN [1,1] - MLP of t", "seconds"); outcomes.append("Seconds: the KAN [1,1] fits are about %.0f s faster than either MLP (p < 0.0001) and about %.1f s slower than the direct spline solve; the hidden-layer KAN is about %.1f s slower than the one-edge KAN." % (abs(r[4]), pooled("KAN [1,1] - LSQ spline", "seconds")[4], pooled("KAN [1,h,1] - KAN [1,1]", "seconds")[4]))
+r = pooled("KAN [1,1] - MLP of t", "seconds")
+if NO_SPLINE:
+    outcomes.append("Seconds: the KAN [1,1] fits are about %.0f s faster than either MLP (p < 0.0001); the hidden-layer KAN is about %.1f s slower than the one-edge KAN." % (abs(r[4]), pooled("KAN [1,h,1] - KAN [1,1]", "seconds")[4]))
+else:
+    outcomes.append("Seconds: the KAN [1,1] fits are about %.0f s faster than either MLP (p < 0.0001) and about %.1f s slower than the direct spline solve; the hidden-layer KAN is about %.1f s slower than the one-edge KAN." % (abs(r[4]), pooled("KAN [1,1] - LSQ spline", "seconds")[4], pooled("KAN [1,h,1] - KAN [1,1]", "seconds")[4]))
 for o in outcomes:
     S.append(Paragraph("&bull; " + o, B))
 S.append(PageBreak())
 S.append(Paragraph("<b>Figure.</b> Every cell difference (coloured points, one per share and budget) and the pooled mean with its 95% "
                    "confidence interval (black diamond and bar), for each comparison and metric. Points below the dotted zero line "
                    "favour model A.", B))
-S.append(Image(os.path.join(HERE, "differences_plot.png"), width=26 * cm, height=26 * cm * 4.2 / 14))
-SimpleDocTemplate(os.path.join(HERE, "differences.pdf"), pagesize=landscape(A4), leftMargin=1.2 * cm, rightMargin=1.2 * cm, topMargin=1 * cm, bottomMargin=1 * cm).build(S)
+S.append(Image(os.path.join(HERE, "differences_plot" + SUFFIX + ".png"), width=26 * cm, height=26 * cm * 4.2 / 14))
+SimpleDocTemplate(os.path.join(HERE, "differences" + SUFFIX + ".pdf"), pagesize=landscape(A4), leftMargin=1.2 * cm, rightMargin=1.2 * cm, topMargin=1 * cm, bottomMargin=1 * cm).build(S)
 print("wrote differences.csv, differences_summary.csv, differences_ttests.csv, differences_plot.png, differences.pdf")
