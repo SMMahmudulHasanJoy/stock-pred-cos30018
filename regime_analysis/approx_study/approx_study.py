@@ -48,6 +48,7 @@ FMLP = {15: (2, 2), 30: (2, 3), 60: (4, 4), 120: (6, 6), 240: (8, 9)}  # (n_freq
 LSQ_G = {15: 12, 30: 27, 60: 57, 120: 117, 240: 237}         # params = G + 3 coefficients
 FKS_G = {15: 7, 30: 15, 60: 30, 120: 60, 240: 120}           # params = (G+3) coef + (G-1) knots
 KAN2_CFG = {15: (1, 3), 30: (1, 3), 60: (1, 11), 120: (1, 31), 240: (2, 21)}  # two hidden layers [1,h,h,1]: (h, G); 36 is the minimum, so 15/30 get 36
+KAN3_CFG = {15: (1, 3), 30: (1, 3), 60: (1, 6), 120: (1, 21), 240: (2, 11)}   # three hidden layers [1,h,h,h,1]: (h, G); 48 is the minimum
 
 
 def load(ticker):
@@ -170,6 +171,7 @@ def jobs():
                 out.append((tk, b, "mlp", s))
                 out.append((tk, b, "fmlp", s))
                 out.append((tk, b, "kan1hh1", s))
+                out.append((tk, b, "kan1hhh1", s))
     return out
 
 
@@ -193,6 +195,9 @@ def run(job):
     elif m == "kan1hh1":
         h, G = KAN2_CFG[b]
         p, n, extra = fit_kan(t, y, [1, h, h, 1], G, s)
+    elif m == "kan1hhh1":
+        h, G = KAN3_CFG[b]
+        p, n, extra = fit_kan(t, y, [1, h, h, h, 1], G, s)
     elif m == "mlp":
         p, n, extra = fit_mlp(t, y, MLP_W[b], s)
     elif m == "fmlp":

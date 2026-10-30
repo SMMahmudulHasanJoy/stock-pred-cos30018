@@ -9,15 +9,15 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 import approx_study as A
 
-MODELS = ["lsq", "fks", "kan11", "kan1h1", "kan1hh1", "mlp", "fmlp"]
+MODELS = ["lsq", "fks", "kan11", "kan1h1", "kan1hh1", "kan1hhh1", "mlp", "fmlp"]
 LABEL = {"lsq": "LSQ cubic spline (fixed knots)", "fks": "free-knot cubic spline",
-         "kan11": "KAN [1,1] (one spline edge)", "kan1h1": "KAN [1,h,1] (hidden layer)", "kan1hh1": "KAN [1,h,h,1] (two hidden layers)",
+         "kan11": "KAN [1,1] (one spline edge)", "kan1h1": "KAN [1,h,1] (hidden layer)", "kan1hh1": "KAN [1,h,h,1] (two hidden layers)", "kan1hhh1": "KAN [1,h,h,h,1] (three hidden layers)",
          "mlp": "MLP of t (tanh)", "fmlp": "Fourier-feature MLP of t"}
-COL = {"lsq": "#555555", "fks": "#000000", "kan11": "#c46a3f", "kan1h1": "#e0a070", "kan1hh1": "#8c4a1f",
+COL = {"lsq": "#555555", "fks": "#000000", "kan11": "#c46a3f", "kan1h1": "#e0a070", "kan1hh1": "#8c4a1f", "kan1hhh1": "#5a2d10",
        "mlp": "#2f6f9f", "fmlp": "#5fb0e0"}
 
 recs = [json.load(open(p)) for p in glob.glob(os.path.join(HERE, "fits", "*.json"))]
-assert len(recs) == 255, len(recs)
+assert len(recs) == 300, len(recs)
 by = defaultdict(list)
 for r in recs:
     by[(r["ticker"], r["model"], r["budget"])].append(r)
