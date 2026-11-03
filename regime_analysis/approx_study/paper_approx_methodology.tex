@@ -1,0 +1,245 @@
+{\JOY
+\subsection{Problem Formulation}
+\label{approx_problem}
+
+The second part of this study treats the price series not as a sequence
+to be extended into the future but as a function to be reproduced. Let
+\(\{p_1, \ldots, p_T\}\) be the scaled Close prices of one asset on
+\(T\) consecutive trading days, and let
+\(t_i = (i-1)/(T-1) \in [0,1]\) be the rescaled time of day \(i\). The
+approximation task is to find, within a family of functions
+\(f_\theta : [0,1] \to \mathbb{R}\) with parameter vector
+\(\theta \in \mathbb{R}^{N}\), the member closest to the data in the
+least-squares sense,
+\begin{equation}
+\theta^{*} = \arg\min_{\theta}\;
+\frac{1}{T}\sum_{i=1}^{T}\bigl(f_\theta(t_i) - p_i\bigr)^{2},
+\label{eq:approx_ls}
+\end{equation}
+and to record how the attained error depends on the number of
+parameters \(N\). Unlike the forecasting protocol of
+Section~\ref{method}, the whole series is available to every model and
+there is no train/test split: the quantity of interest is the
+\emph{in-sample} approximation error as a function of model size, which
+isolates the representational capacity of an architecture from the
+unpredictability of the target. In-sample fit carries no information
+about forecasting skill~\cite{welch2008comprehensive}, and no such claim
+is made here.
+
+The study is organised around \emph{parameter budgets}. Five target
+sizes, \(N^{*} \in \{15, 30, 60, 120, 240\}\), are fixed in advance and
+every model is configured so that its actual parameter count \(N\) is as
+close to \(N^{*}\) as its architecture permits. Since the architectural
+settings (grid size, layer width) are integers, exact matching is not
+always possible; the actual \(N\) of every fit is reported and is used
+as the abscissa of all error-versus-size plots. Two error measures are
+recorded: the root mean square error of~\eqref{eq:approx_ls} and the
+maximum absolute error \(\max_i |f_\theta(t_i) - p_i|\). Because the
+error of a piecewise-smooth approximant to a function of limited
+smoothness decays as a power of \(N\)~\cite{deboor2001practical}, the
+results are summarised by the slope of \(\log\mathrm{RMSE}\) against
+\(\log N\), estimated by least squares over the budgets 30 to 240.
+
+\subsection{Data Collection and Preparation}
+\label{approx_data}
+
+Three assets are used. The first is the CBA.AX series of
+Section~\ref{data_collection}. The other two were chosen to differ from
+it as much as possible in character: TSLA, a highly volatile stock
+(annualised volatility of daily log returns of 70\% over the period, with
+a 74\% maximum drawdown), and LLY, a steadily trending stock (32\%
+volatility, the highest Kaufman efficiency ratio among fourteen
+candidate large-cap tickers screened, and a 3.4-fold price increase).
+Daily Open, High, Low, Close and Volume for TSLA and LLY were obtained
+from the Yahoo Finance daily chart service for the same window as
+CBA.AX, 2~January 2020 to 31~July 2023, giving 901 NYSE trading days
+against 905 ASX trading days for CBA.AX. Each feature was independently
+Min--Max scaled to \([0,1]\) over the full series, exactly as the
+CBA.AX file was prepared, and only the scaled Close is used as the
+approximation target. Because the whole series is fitted, there is no
+test block and the scaling involves no leakage of the kind addressed in
+Section~\ref{data_collection}. All errors are therefore expressed in each
+asset's own scaled price units, so that an error of \(0.01\) is one
+hundredth of that asset's price range over the period; errors are
+comparable between models on the same asset, and ratios of errors are
+comparable across assets.
+
+\subsection{Model Implementation}
+\label{approx_impl}
+
+Four learned models are compared, chosen so that each differs from its
+neighbour in exactly one respect: a KAN with a single spline edge; the
+same KAN with a hidden layer; a multilayer perceptron (MLP) taking \(t\)
+as its input; and the same MLP preceded by a fixed Fourier-feature map
+of \(t\). The MLP is the comparator used by the KAN authors
+themselves~\cite{liu2024kan} and the one on which matched-parameter
+comparisons have been reported~\cite{yu2024kanmlp}; the Fourier variant
+is included because plain MLPs of a low-dimensional coordinate are known
+to fit low-frequency content first and high-frequency content very
+slowly (spectral bias~\cite{rahaman2019spectral}), a handicap that a
+fixed sinusoidal input map removes~\cite{tancik2020fourier}. KANs are
+implemented in PyKAN~\cite{liu2024kan} and the MLPs in
+PyTorch~\cite{paszke2019pytorch}; all fits run on a single CPU. Models
+whose fitting involves randomness (initial weights, random Fourier
+frequencies) are run from three fixed seeds \(\{0, 1, 2\}\) and the mean
+and sample standard deviation over seeds are reported.
+
+\subsection{KAN Configuration}
+\label{approx_kan}
+
+\noindent\textbf{Single-edge KAN.} The network \texttt{KAN(width=[1,1])}
+has one input node (\(t\)), one output node and a single edge between
+them, so the whole model is one learnable univariate function
+\(f_\theta(t) = w_b\,\mathrm{silu}(t) + w_s\,s(t)\), where
+\(s\) is a cubic B-spline (\(k=3\)) on \(G\) equal subintervals of
+\([0,1]\) and \(\mathrm{silu}(x) = x/(1+e^{-x})\) is PyKAN's fixed base
+function. The learnable quantities are the \(G+3\) spline coefficients
+and the two scales \(w_b, w_s\); PyKAN additionally allocates four
+affine parameters per edge to its symbolic branch, which is disabled
+throughout, so the counted size is \(N = G + 9\) (of which \(G + 5\) act
+on the output). The grid is fixed on \([0,1]\) and is not updated
+during training. Setting \(G \in \{6, 21, 51, 111, 231\}\) meets the
+five budgets exactly.
+
+\noindent\textbf{Hidden-layer KAN.} The network
+\texttt{KAN(width=[1,\(h\),1])} inserts a layer of \(h\) summation nodes
+between input and output, giving \(2h\) edges, each a cubic B-spline on
+\(G = 3\) subintervals plus the base term. With PyKAN's parameterisation
+this costs about \(24h\) parameters; \(h \in \{1, 1, 2, 5, 10\}\) gives
+\(N = 24, 24, 48, 120, 240\). The two smallest budgets cannot be met,
+since \(h = 1\) is the minimum, and are reported at \(N = 24\).
+
+Both KANs are fitted with full-batch L-BFGS~\cite{liu1989lbfgs} for 80
+steps, the model receiving the complete series at every step, and the
+final weights are kept. The specification is summarised in
+Table~\ref{tab:approx_kan_config}.
+
+\begin{table}[h]
+\centering\JOY
+\caption{KAN implementation specification for the approximation study}
+\label{tab:approx_kan_config}
+\small
+\begin{tabular}{ll}
+\hline
+\textbf{Parameter} & \textbf{Value} \\
+\hline
+Framework & PyTorch + PyKAN library \\
+Single-edge architecture & \texttt{KAN(width=[1, 1])} \\
+Hidden-layer architecture & \texttt{KAN(width=[1, \(h\), 1])},
+\(h \in \{1,1,2,5,10\}\) \\
+Input & rescaled time \(t \in [0,1]\) \\
+Output & scaled Close price \\
+Grid size & \(G \in \{6,21,51,111,231\}\) (single edge); 3 (hidden layer) \\
+\(k\) (B-spline degree) & 3 \\
+Grid range / update & \([0,1]\), fixed (no grid update) \\
+Base function & \texttt{silu} (PyKAN default) \\
+Optimiser & L-BFGS (full-batch, second-order) \\
+Training steps & 80 L-BFGS iterations \\
+Regularisation & None \\
+Random seeds & \(\{0, 1, 2\}\) \\
+Parameter count & \(G+9\) (single edge); \(\approx 24h\) (hidden layer) \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{MLP Configuration}
+\label{approx_mlp}
+
+Two MLP modes are implemented; they share the same network and differ
+only in what is fed to it.
+
+\noindent\textbf{MLP of \(t\).} A fully connected network with two
+hidden layers of width \(w\) and hyperbolic-tangent units, and a linear
+output unit,
+\begin{equation}
+f_\theta(t) = \mathbf{W}_3\,\tanh\!\bigl(\mathbf{W}_2\,\tanh(\mathbf{W}_1 t + \mathbf{b}_1) + \mathbf{b}_2\bigr) + b_3,
+\label{eq:mlp}
+\end{equation}
+with \(\mathbf{W}_1 \in \mathbb{R}^{w\times 1}\),
+\(\mathbf{W}_2 \in \mathbb{R}^{w\times w}\),
+\(\mathbf{W}_3 \in \mathbb{R}^{1\times w}\) and biases
+\(\mathbf{b}_1, \mathbf{b}_2 \in \mathbb{R}^{w}\), \(b_3 \in \mathbb{R}\).
+The parameter count is \(N = w^2 + 4w + 1\); since \(w\) is an integer
+the budgets cannot be met exactly, and
+\(w \in \{2, 4, 6, 9, 14\}\) gives \(N = 13, 33, 61, 118, 253\), the
+nearest attainable values. Such a network is a universal
+approximator~\cite{cybenko1989approximation, hornik1989universal}, but
+when trained by gradient descent on a scalar coordinate it is subject to
+spectral bias~\cite{rahaman2019spectral}.
+
+\noindent\textbf{Fourier-feature MLP of \(t\).} The identical network
+of~\eqref{eq:mlp} applied not to \(t\) but to the vector
+\begin{equation}
+\gamma(t) = \bigl[\sin(2\pi b_1 t), \ldots, \sin(2\pi b_m t),
+\cos(2\pi b_1 t), \ldots, \cos(2\pi b_m t)\bigr] \in \mathbb{R}^{2m},
+\label{eq:fourier}
+\end{equation}
+following~\cite{tancik2020fourier}. The \(m\) frequencies
+\(b_j\) are drawn once per seed from \(\mathcal{N}(0, \sigma^2)\) with
+\(\sigma = 6\) and then held fixed; they are not trainable and are not
+counted as parameters. The first layer now has \(2m\) inputs, so
+\(N = w^2 + (2m+3)w + 1\), and the width is reduced to keep the total
+near the budget: \((m, w) \in \{(2,2), (2,3), (4,4), (6,6), (8,9)\}\)
+gives \(N = 19, 31, 61, 127, 253\). The bandwidth \(\sigma\) was not
+tuned; a spot check at \(\sigma = 20\) (CBA.AX, 61 parameters, seed 0)
+changed the RMSE from \(0.0271\) to \(0.0257\).
+
+Both MLP modes are trained by full-batch gradient descent with the Adam
+optimiser~\cite{kingma2015adam} (initial learning rate \(10^{-2}\),
+cosine-annealed to zero) on the mean squared error for 20{,}000 steps,
+and the weights with the lowest training loss encountered during the
+run are retained. The training length was set after observing that
+4{,}000 steps left the plain MLP clearly unconverged (CBA.AX, 61
+parameters: RMSE \(0.074\) at 4{,}000 steps against \(0.048\) at
+20{,}000). The specification is summarised in
+Table~\ref{tab:approx_mlp_config}.
+
+\begin{table}[h]
+\centering\JOY
+\caption{MLP implementation specification for the approximation study}
+\label{tab:approx_mlp_config}
+\small
+\begin{tabular}{ll}
+\hline
+\textbf{Parameter} & \textbf{Value} \\
+\hline
+Framework & PyTorch \\
+Architecture & \(1 \to w \to w \to 1\) (two hidden layers) \\
+Hidden activation & \texttt{tanh} \\
+Output activation & linear \\
+Input, mode 1 (MLP of \(t\)) & rescaled time \(t \in [0,1]\) \\
+Input, mode 2 (Fourier MLP) & \(\gamma(t) \in \mathbb{R}^{2m}\),
+eq.~\eqref{eq:fourier} \\
+Fourier frequencies & \(m \in \{2,2,4,6,8\}\), \(b_j \sim \mathcal{N}(0, 6^2)\), fixed \\
+Width \(w\), mode 1 & \(\{2, 4, 6, 9, 14\}\) \\
+Width \(w\), mode 2 & \(\{2, 3, 4, 6, 9\}\) \\
+Optimiser & Adam (full-batch), learning rate \(10^{-2}\), cosine schedule \\
+Loss function & Mean squared error (MSE) \\
+Training steps & 20{,}000 (fixed), best-loss weights retained \\
+Regularisation & None \\
+Random seeds & \(\{0, 1, 2\}\) \\
+Parameter count & \(w^2+4w+1\) (mode 1); \(w^2+(2m+3)w+1\) (mode 2) \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Comparison Protocol and Limitations}
+\label{approx_protocol}
+
+For each asset, each model and each budget the model is fitted to the
+full series by~\eqref{eq:approx_ls}, three times for the random models,
+yielding 180 fits across the four learned models; every fitted value,
+the two error measures, the parameter count and the wall-clock time are
+recorded. Two asymmetries should be kept in mind. First, the
+optimisers differ in kind, as in Section~\ref{sec:comparison_protocol}:
+the KANs use 80 second-order full-batch steps, the MLPs 20{,}000
+first-order full-batch steps, so recorded fit times reflect these
+choices and the single-CPU environment rather than an intrinsic cost
+of either architecture. Second, convergence was verified for the
+single-edge KAN, whose error is unchanged between 20 and 320 L-BFGS
+steps, but the hidden-layer KAN continues to improve beyond 80 steps
+and both MLPs improve by a few per cent beyond 20{,}000 steps; the
+reported figures for those models are therefore upper bounds on their
+attainable error. Parameter counts are matched to within about 10\%
+except at the two smallest budgets of the hidden-layer KAN.
+}
