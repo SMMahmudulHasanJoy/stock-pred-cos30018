@@ -1,0 +1,32 @@
+% Inserted into the Preliminaries / ANN subsection of the Overleaf paper,
+% immediately after the LSTM paragraph (Joy, 4 Nov 2026). Red = \JOY.
+% The Preliminaries intro sentence was also extended minimally:
+%   "... neural network-based forecasting {\JOY and approximation} models,
+%    {\JOY including the two feed-forward benchmarks used in the
+%    approximation part of the study,} ..."
+{\JOY
+\paragraph{Multilayer Perceptrons (MLP) and Fourier features.}
+A multilayer perceptron with two hidden layers of width \(w\) maps a
+scalar input \(t\) to
+\begin{equation}
+f(t)=W_3\,\tanh\!\bigl(W_2\,\tanh(W_1 t+b_1)+b_2\bigr)+b_3,
+\label{eq:mlp}
+\end{equation}
+with fixed activation functions on the nodes and learnable weights on
+the edges, the complement of the KAN arrangement. Gradient-trained MLPs
+fit low-frequency components of a target first and high-frequency
+detail only slowly, a property known as spectral
+bias~\cite{rahaman2019spectral}. A standard remedy is to replace the
+input by a random Fourier feature map~\cite{tancik2020fourier}
+\begin{equation}
+\gamma(t)=\bigl[\sin(2\pi b_1 t),\ldots,\sin(2\pi b_m t),
+\cos(2\pi b_1 t),\ldots,\cos(2\pi b_m t)\bigr],\qquad
+b_j\sim\mathcal{N}(0,\sigma^2),
+\label{eq:fourier}
+\end{equation}
+drawn once and kept fixed, so that the network operates on
+\(\gamma(t)\) rather than on \(t\). Both forms are used as feed-forward
+benchmarks for the KAN in the approximation part of the study, following
+the practice of comparing KANs and MLPs at matched parameter
+counts~\cite{liu2024kan,yu2024kanmlp}.
+}
