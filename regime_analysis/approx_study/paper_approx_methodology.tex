@@ -44,10 +44,10 @@ the scalar \(t\) rather than a flattened window, so there is no
 look-back and no heuristic hidden-layer size. Two widths are compared.
 The single-edge network \texttt{KAN(width=[1,1])} has no hidden layer
 and its grid size \(G\in\{6,21,51,111,231\}\) is chosen to meet each
-budget exactly (\(N=G+9=15,30,60,120,240\)). The hidden-layer network
+budget exactly (\(N=G+9\)). The hidden-layer network
 \texttt{KAN(width=[1,\(h\),1])} keeps the forecasting grid \(G=3\) and
-sets \(h\in\{1,1,2,5,10\}\), giving \(N=24h=24,24,48,120,240\); the two
-smallest budgets cannot be met and are both reported at \(N=24\).
+sets \(h\in\{1,1,2,5,10\}\) (\(N=24h\); the two smallest budgets cannot
+be met and are both reported at \(N=24\)).
 \(N\) is the number of trainable parameters reported by PyKAN, which
 includes, for every edge, four affine parameters of a symbolic branch
 that is never activated in this study; they are counted because the
@@ -68,21 +68,39 @@ rather than one.
 
 The MLP of Eq.~\eqref{eq:mlp} is implemented in
 PyTorch~\cite{paszke2019pytorch} with two hidden layers of width \(w\),
-\texttt{tanh} units and a linear output, in two modes. With the scalar
-\(t\) as input, \(N=w^2+4w+1\) and \(w\in\{2,4,6,9,14\}\) gives
-\(N=13,33,61,118,253\). With the Fourier-feature map \(\gamma(t)\) of
-Eq.~\eqref{eq:fourier} as input, \(m\) frequencies are drawn from
-\(\mathcal{N}(0,6^2)\) once per seed and held fixed (not trained, not
-counted), \(N=w^2+(2m+3)w+1\), and
-\((m,w)\in\{(2,2),(2,3),(4,4),(6,6),(8,9)\}\) gives
-\(N=19,31,61,127,253\). Both modes are trained on the mean squared error
-by full-batch Adam~\cite{kingma2015adam} (default moment constants,
-learning rate \(10^{-2}\) cosine-annealed to zero) for a fixed
-20{,}000 steps with no early stopping, retaining the weights of lowest
-training loss; PyTorch default initialisation is used, with no dropout
-or weight decay, from seeds \(\{0,1,2\}\). In total the study comprises
+\texttt{tanh} units and a linear output, in two modes: the input is
+either the scalar \(t\) (\(N=w^2+4w+1\)) or its Fourier-feature map
+\(\gamma(t)\) of Eq.~\eqref{eq:fourier} with \(m\) frequencies drawn
+from \(\mathcal{N}(0,6^2)\) once per seed and held fixed, neither
+trained nor counted (\(N=w^2+(2m+3)w+1\)). Both modes are trained on
+the mean squared error by full-batch Adam~\cite{kingma2015adam}
+(default moment constants, learning rate \(10^{-2}\) cosine-annealed to
+zero) for a fixed 20{,}000 steps with no early stopping, retaining the
+weights of lowest training loss; PyTorch default initialisation is
+used, with no dropout or weight decay, from seeds \(\{0,1,2\}\).
+Table~\ref{tab:approx_config} lists the settings and actual parameter
+counts per budget for all four models; in total the study comprises
 \(3\) assets \(\times\) \(5\) budgets \(\times\) \(4\) models
 \(\times\) \(3\) seeds \(=180\) fits.
+
+\begin{table}[h]
+\centering\JOY
+\caption{Approximation study: settings and actual parameter counts \(N\) per budget}
+\label{tab:approx_config}
+\small
+\begin{tabular}{lcccc}
+\hline
+\textbf{Budget \(N^{*}\)} & \textbf{KAN [1,1]} & \textbf{KAN [1,\(h\),1]} & \textbf{MLP of \(t\)} & \textbf{Fourier MLP} \\
+ & \(G\) (\(N\)) & \(h\) (\(N\)) & \(w\) (\(N\)) & \((m,w)\) (\(N\)) \\
+\hline
+15  & 6 (15)    & 1 (24)   & 2 (13)   & (2,2) (19)  \\
+30  & 21 (30)   & 1 (24)   & 4 (33)   & (2,3) (31)  \\
+60  & 51 (60)   & 2 (48)   & 6 (61)   & (4,4) (61)  \\
+120 & 111 (120) & 5 (120)  & 9 (118)  & (6,6) (127) \\
+240 & 231 (240) & 10 (240) & 14 (253) & (8,9) (253) \\
+\hline
+\end{tabular}
+\end{table}
 
 As in Section~\ref{sec:comparison_protocol}, the optimisers differ in
 kind (80 second-order steps against 20{,}000 first-order steps), so

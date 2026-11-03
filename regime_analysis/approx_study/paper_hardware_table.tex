@@ -1,0 +1,29 @@
+% Hardware table, moved from Section 3.6 to the head of Results and Discussion
+% (label rNd_hw). System 2 column removed; two red rows added.
+% CAUTION (Joy): the approximation fits in approx_study/fits and the purged
+% multi-ticker forecasting runs were executed in a Linux CPU sandbox, not on
+% the Zenbook; re-run on the Zenbook before quoting fit times for them.
+{\JOY All forecasting and approximation experiments reported in this section
+were run on the hardware and software of Table~\ref{tab:hardware}.}
+
+\begin{table}[h]
+\centering
+\caption{Hardware and software environment}
+\label{tab:hardware}
+\small
+\begin{tabular}{ll}
+\hline
+\textbf{Component} & \textbf{Value} \\
+\hline
+Device & ASUS Zenbook Duo UX8406MA \\
+Processor & Intel Core Ultra 9 185H (16 cores, 22 threads, 2.5~GHz) \\
+RAM & 32~GB DDR5 \\
+GPU & CPU-only execution (no discrete GPU) \\
+OS & Microsoft Windows 11 Home (Build 26200) \\
+LSTM framework & TensorFlow/Keras \\
+KAN framework & PyTorch + PyKAN \\
+{\JOY MLP framework} & {\JOY PyTorch} \\
+{\JOY Fourier MLP framework} & {\JOY PyTorch (fixed random Fourier features, NumPy)} \\
+\hline
+\end{tabular}
+\end{table}
