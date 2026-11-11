@@ -1,7 +1,0 @@
-# Transient artefacts, not part of the record.
-# Checkpoints are written by resume_kancfg.py so a long pykan fit can be
-# completed across several short invocations. They are deleted automatically
-# when a job finishes; any left behind are stale and safe to remove.
-results/ckpt/
-__pycache__/
-*.pyc

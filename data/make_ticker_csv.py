@@ -1,15 +1,15 @@
 """
 make_ticker_csv.py
-Build Min-Max scaled OHLCV CSVs for the extra tickers used in the
-multi-ticker robustness check, in exactly the format of
-CBA.AX_2020-01-01_2023-08-01.csv (every column scaled over the whole
-series, as v0.2/MLP/get_data.py does with save_data=True).
+==================
+Builds the TSLA and LLY data files from the raw daily values, in the same
+format as the CBA.AX file: Date, Open, High, Low, Close, Volume, with every
+column Min-Max scaled to [0, 1] over the whole period.
 
-Source: Yahoo Finance daily chart data (query1.finance.yahoo.com/v8/finance/chart),
-2020-01-02 .. 2023-08-01, 901 NYSE trading days. The raw_<TICKER>_ohlcv.txt
-files hold Open,High,Low,Close (2 dp) and Volume (thousands), one row per
-trading day, without dates; the NYSE calendar is regenerated here and checked
-to have 901 days. Whole-series Min-Max scaling makes the units irrelevant.
+Source: Yahoo Finance daily data, 2 January 2020 to 1 August 2023
+(901 NYSE trading days). raw_<TICKER>_ohlcv.txt holds Open, High, Low, Close
+and Volume (in thousands), one row per trading day, without dates; the NYSE
+calendar is rebuilt here and checked to have 901 days. Because every column
+is rescaled, the original units do not matter.
 
     python make_ticker_csv.py
 """

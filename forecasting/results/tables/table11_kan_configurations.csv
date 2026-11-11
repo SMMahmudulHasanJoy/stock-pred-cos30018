@@ -1,0 +1,8 @@
+configuration,grid,k,hidden_nodes,train_rmse_mean,train_rmse_sd,test_rmse_mean,test_rmse_sd
+C1,3,6,floor(N_train/10),0.016323,0.000091,0.186238,0.130829
+C2,3,2,floor(N_train/10),0.013448,0.000045,0.035885,0.001030
+C3,7,2,floor(N_train/10),0.005855,0.000206,0.038799,0.001501
+C4,3,2,floor(N_train/4),0.012467,0.000225,0.034261,0.002398
+C5,3,2,floor(N_train/10),0.013319,0.000035,0.035708,0.001850
+C6,3,2,floor(N_train/5),0.012597,0.000306,0.036770,0.000999
+Naive persistence,,,,0.022403,,0.020140,

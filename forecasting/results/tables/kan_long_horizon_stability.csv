@@ -1,0 +1,3 @@
+horizon_days,kan_rmse_all_folds_mean,kan_rmse_all_folds_sd,kan_rmse_without_fold0_mean,kan_rmse_without_fold0_sd,fold0_prediction_min,fold0_prediction_max
+100,0.241805,0.086298,0.127622,0.006126,-0.994178,1.369087
+200,0.276384,0.058428,0.159952,0.014607,-0.455160,3.151484

@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.idea/
+.vscode/
+.ipynb_checkpoints/
+# PyKAN writes checkpoints here when auto_save is on
+model/

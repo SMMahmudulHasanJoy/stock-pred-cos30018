@@ -1,0 +1,7 @@
+horizon_days,configuration,seeds,test_rmse_mean,test_rmse_sd,best_seed_test_rmse,naive_rmse,in_paper
+1,L2-20-tanh,3,0.058603,0.000893,0.057787,0.020140,True
+2,L2-20-tanh,3,0.057921,0.001384,0.056734,0.025189,True
+5,L2-20-tanh,3,0.067272,0.005130,0.061769,0.036358,False
+10,L2-20-tanh,3,0.073717,0.005043,0.068859,0.050986,False
+100,L2-20-tanh,3,0.107923,0.012569,0.100216,0.110926,True
+200,L2-20-tanh,3,0.137541,0.008163,0.129681,0.132294,True
